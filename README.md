@@ -49,16 +49,24 @@
 | `MEM_THRESHOLD` | `90.0` | OCRスキップするメモリ使用率（%） |
 | `DAY_START_HOUR` | `3` | 業務日の切り替わり時刻（深夜3時） |
 
-## 依存パッケージ
+## インストール
 
-```
-pywin32
-psutil
-Pillow
-pytesseract
+### 1. Tesseract OCR
+
+https://github.com/UB-Mannheim/tesseract/wiki からインストーラーをダウンロードして実行。
+インストール時に **Japanese** と **English** の言語データを選択すること。
+
+### 2. Pythonを実行可能にする
+
+```bash
+pip install pywin32
 ```
 
-Tesseract OCR（`jpn+eng`）が別途インストール済みであること。
+### 3. 拡張機能のインストール
+
+```bash
+pip install psutil pillow pytesseract pywin32
+```
 
 ## 実行
 
