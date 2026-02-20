@@ -84,26 +84,26 @@ def perform_ocr():
 def save_log(title, ocr_text):
     logical_date = get_logical_date()
     date_str = logical_date.strftime("%Y-%m-%d")
-    pc_name = os.environ.get('COMPUTERNAME', 'UnknownPC')
+    # pc_name = os.environ.get('COMPUTERNAME', 'UnknownPC')  # device記録復活時に使用
     filepath = os.path.join(LOG_DIR, f"activity_{date_str}.jsonl")
 
-    # 前回エントリのdeviceを確認し、変わった場合のみ記録
-    last_device = None
-    if os.path.exists(filepath):
-        try:
-            with open(filepath, 'rb') as f:
-                f.seek(0, 2)
-                size = f.tell()
-                if size > 0:
-                    f.seek(max(0, size - 500))
-                    last_line = f.read().decode('utf-8').strip().split('\n')[-1]
-                    last_device = json.loads(last_line).get('device')
-        except Exception:
-            pass
+    # device記録（復活時はコメントアウトを外す）
+    # last_device = None
+    # if os.path.exists(filepath):
+    #     try:
+    #         with open(filepath, 'rb') as f:
+    #             f.seek(0, 2)
+    #             size = f.tell()
+    #             if size > 0:
+    #                 f.seek(max(0, size - 500))
+    #                 last_line = f.read().decode('utf-8').strip().split('\n')[-1]
+    #                 last_device = json.loads(last_line).get('device')
+    #     except Exception:
+    #         pass
 
     entry = {"timestamp": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}
-    if pc_name != last_device:
-        entry["device"] = pc_name
+    # if pc_name != last_device:
+    #     entry["device"] = pc_name
     entry["window_title"] = title
     entry["ocr_text"] = ocr_text[:500]
 
