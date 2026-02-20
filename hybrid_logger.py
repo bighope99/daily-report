@@ -7,6 +7,7 @@ import psutil
 from PIL import ImageGrab
 import pytesseract
 import re
+import ctypes
 
 # ==========================================
 # 設定
@@ -23,8 +24,8 @@ CPU_THRESHOLD = 85.0
 MEM_THRESHOLD = 90.0
 
 # OCRテキスト取得範囲
-OCR_SKIP_CHARS = 0   # 先頭から読み飛ばす文字数（ヘッダー・メニュー領域）
-OCR_END_CHARS = 800    # 取得終了位置
+OCR_SKIP_CHARS = 300   # 先頭から読み飛ばす文字数（ヘッダー・メニュー領域）
+OCR_END_CHARS = 1000    # 取得終了位置
 
 # ==========================================
 # ロジック
@@ -57,6 +58,14 @@ def get_active_window_title():
         return win32gui.GetWindowText(hwnd)
     except Exception:
         return "Unknown"
+
+def is_session_locked():
+    """画面ロック中か確認する（ロック中はInputDesktopにアクセス不可）"""
+    hDesk = ctypes.windll.user32.OpenInputDesktop(0, False, 0x0100)
+    if hDesk:
+        ctypes.windll.user32.CloseDesktop(hDesk)
+        return False
+    return True
 
 def is_system_overloaded():
     """CPUとメモリの使用率をチェックし、閾値を超えているか判定する"""
@@ -129,6 +138,10 @@ def main():
                 cleanup_old_logs()
                 last_cleanup_date = current_date
             
+            if is_session_locked():
+                time.sleep(INTERVAL)
+                continue
+
             title = get_active_window_title()
             if title:
                 is_heavy, cpu, mem = is_system_overloaded()
