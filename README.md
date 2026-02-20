@@ -48,6 +48,8 @@
 | `CPU_THRESHOLD` | `85.0` | OCRスキップするCPU使用率（%） |
 | `MEM_THRESHOLD` | `90.0` | OCRスキップするメモリ使用率（%） |
 | `DAY_START_HOUR` | `3` | 業務日の切り替わり時刻（深夜3時） |
+| `OCR_SKIP_CHARS` | `300` | OCRテキストの読み飛ばし文字数（先頭のヘッダー・メニュー領域） |
+| `OCR_END_CHARS` | `800` | OCRテキストの取得終了位置 |
 
 ## インストール
 

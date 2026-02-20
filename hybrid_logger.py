@@ -16,11 +16,15 @@ pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tessera
 
 DAY_START_HOUR = 3
 RETENTION_DAYS = 7
-INTERVAL = 300  # 5分
+INTERVAL = 120  # 5分
 
 # 高負荷と判定する閾値（%）
 CPU_THRESHOLD = 85.0
 MEM_THRESHOLD = 90.0
+
+# OCRテキスト取得範囲
+OCR_SKIP_CHARS = 300   # 先頭から読み飛ばす文字数（ヘッダー・メニュー領域）
+OCR_END_CHARS = 800    # 取得終了位置
 
 # ==========================================
 # ロジック
@@ -71,8 +75,8 @@ def perform_ocr():
         # 画像データを保存せず、直接Tesseractに渡す
         text = pytesseract.image_to_string(screenshot, lang='jpn+eng')
         cleaned = re.sub(r'\s+', ' ', text).strip()
-        if len(cleaned) >= 300:
-            return cleaned[300:800]
+        if len(cleaned) >= OCR_SKIP_CHARS:
+            return cleaned[OCR_SKIP_CHARS:OCR_END_CHARS]
         return cleaned
     except Exception as e:
         return f"[OCR Error] {str(e)}"
