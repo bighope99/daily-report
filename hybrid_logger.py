@@ -6,6 +6,7 @@ import win32gui
 import psutil
 from PIL import ImageGrab
 import pytesseract
+import re
 
 # ==========================================
 # 設定
@@ -69,7 +70,10 @@ def perform_ocr():
         screenshot = ImageGrab.grab()
         # 画像データを保存せず、直接Tesseractに渡す
         text = pytesseract.image_to_string(screenshot, lang='jpn+eng')
-        return text.strip()
+        cleaned = re.sub(r'\s+', ' ', text).strip()
+        if len(cleaned) >= 300:
+            return cleaned[300:800]
+        return cleaned
     except Exception as e:
         return f"[OCR Error] {str(e)}"
 
@@ -77,7 +81,7 @@ def save_log(title, ocr_text, cpu_usage, mem_usage, status):
     logical_date = get_logical_date()
     date_str = logical_date.strftime("%Y-%m-%d")
     pc_name = os.environ.get('COMPUTERNAME', 'UnknownPC')
-    filepath = os.path.join(LOG_DIR, f"activity_{date_str}_{pc_name}.jsonl")
+    filepath = os.path.join(LOG_DIR, f"activity_{date_str}.jsonl")
     
     entry = {
         "timestamp": datetime.datetime.now().isoformat(),
