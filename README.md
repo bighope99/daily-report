@@ -78,6 +78,14 @@ pip install psutil pillow pytesseract pywin32
 pythonw hybrid_logger.py
 ```
 
+### 停止
+
+コマンドプロンプトで以下を実行：
+
+```
+taskkill /F /IM pythonw.exe
+```
+
 ### スタートアップ登録（PC起動時に自動実行）
 
 1. `Win + R` → `shell:startup` を開く
