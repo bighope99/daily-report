@@ -70,8 +70,19 @@ pip install psutil pillow pytesseract pywin32
 
 ## 実行
 
+コンソールウィンドウを表示せずにバックグラウンド実行するため、`pythonw` を使う。
+
 ```bash
-python hybrid_logger.py
+pythonw hybrid_logger.py
 ```
 
-タスクスケジューラ等でPC起動時に自動実行するとよい。
+### スタートアップ登録（PC起動時に自動実行）
+
+1. `Win + R` → `shell:startup` を開く
+2. ショートカットを新規作成し、リンク先に以下の形式で入力（パスは環境に合わせて変更）：
+
+```
+pythonw.exe "C:\Users\<ユーザー名>\Documents\_support_item\daily-report\hybrid_logger.py"
+```
+
+3. ショートカットをスタートアップフォルダに保存
