@@ -23,7 +23,7 @@ CPU_THRESHOLD = 85.0
 MEM_THRESHOLD = 90.0
 
 # OCRテキスト取得範囲
-OCR_SKIP_CHARS = 300   # 先頭から読み飛ばす文字数（ヘッダー・メニュー領域）
+OCR_SKIP_CHARS = 0   # 先頭から読み飛ばす文字数（ヘッダー・メニュー領域）
 OCR_END_CHARS = 800    # 取得終了位置
 
 # ==========================================
@@ -81,21 +81,32 @@ def perform_ocr():
     except Exception as e:
         return f"[OCR Error] {str(e)}"
 
-def save_log(title, ocr_text, cpu_usage, mem_usage, status):
+def save_log(title, ocr_text):
     logical_date = get_logical_date()
     date_str = logical_date.strftime("%Y-%m-%d")
     pc_name = os.environ.get('COMPUTERNAME', 'UnknownPC')
     filepath = os.path.join(LOG_DIR, f"activity_{date_str}.jsonl")
-    
-    entry = {
-        "timestamp": datetime.datetime.now().isoformat(),
-        "device": pc_name,
-        "status": status,
-        "load": f"CPU:{cpu_usage}%, MEM:{mem_usage}%",
-        "window_title": title,
-        "ocr_text": ocr_text[:500]  # ノイズ削減のため先頭500文字に制限
-    }
-    
+
+    # 前回エントリのdeviceを確認し、変わった場合のみ記録
+    last_device = None
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, 'rb') as f:
+                f.seek(0, 2)
+                size = f.tell()
+                if size > 0:
+                    f.seek(max(0, size - 500))
+                    last_line = f.read().decode('utf-8').strip().split('\n')[-1]
+                    last_device = json.loads(last_line).get('device')
+        except Exception:
+            pass
+
+    entry = {"timestamp": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}
+    if pc_name != last_device:
+        entry["device"] = pc_name
+    entry["window_title"] = title
+    entry["ocr_text"] = ocr_text[:500]
+
     try:
         os.makedirs(LOG_DIR, exist_ok=True)
         with open(filepath, 'a', encoding='utf-8') as f:
@@ -124,11 +135,11 @@ def main():
                 
                 if is_heavy:
                     # 重い時はOCRをスキップしてタイトルだけ記録
-                    save_log(title, "[SKIPPED_DUE_TO_HIGH_LOAD]", cpu, mem, "SKIP_OCR")
+                    save_log(title, "[SKIPPED_DUE_TO_HIGH_LOAD]")
                 else:
                     # 余裕がある時だけOCR実行
                     ocr_text = perform_ocr()
-                    save_log(title, ocr_text, cpu, mem, "FULL_OCR")
+                    save_log(title, ocr_text)
                 
         except Exception as e:
             print(f"Loop Error: {e}")
