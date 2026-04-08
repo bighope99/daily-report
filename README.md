@@ -138,8 +138,8 @@ tail -f /tmp/hybrid_logger.log
 #### 停止・登録解除
 
 ```bash
-# 今すぐ停止
-pkill -f hybrid_logger.py
+# 今すぐ停止（PIDファイルを使って該当プロセスだけ終了）
+kill $(cat ~/daily-report-logs/hybrid_logger.pid)
 
 # 自動起動を解除（ファイルも消す）
 launchctl unload ~/Library/LaunchAgents/com.daily-report.plist
@@ -191,8 +191,10 @@ pythonw hybrid_logger.py
 
 **停止:**
 
-```bash
-taskkill /F /IM pythonw.exe
+```powershell
+# PIDファイルを使って該当プロセスだけ終了（他の pythonw を巻き込まない）
+$pidVal = Get-Content "$env:USERPROFILE\daily-report-logs\hybrid_logger.pid"
+Stop-Process -Id $pidVal
 ```
 
 ---
