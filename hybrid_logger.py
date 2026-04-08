@@ -23,6 +23,7 @@ except ImportError:
 # Windows 専用モジュール
 if platform.system() == "Windows":
     import win32gui
+    import win32process
     import ctypes
 
 # ==========================================
@@ -104,25 +105,43 @@ def merge_conflict_copies(date_str):
         except Exception as e:
             print(f"[Merge Error] {path}: {e}")
 
-def get_active_window_title():
+def get_active_window_info():
+    """フォアグラウンドウィンドウの (window_title, process_name) を返す"""
     if _IS_WINDOWS:
         try:
             hwnd = win32gui.GetForegroundWindow()
-            return win32gui.GetWindowText(hwnd)
+            title = win32gui.GetWindowText(hwnd)
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            process = psutil.Process(pid).name()
+            return title, process
         except Exception:
-            return "Unknown"
+            return "Unknown", "Unknown"
     elif _IS_MAC:
         try:
-            script = 'tell application "System Events" to get name of first application process whose frontmost is true'
+            script = '''
+tell application "System Events"
+    set frontApp to first application process whose frontmost is true
+    set appName to name of frontApp
+    try
+        set winTitle to title of front window of frontApp
+    on error
+        set winTitle to appName
+    end try
+    return appName & "|" & winTitle
+end tell'''
             result = subprocess.run(
                 ["osascript", "-e", script],
-                capture_output=True, text=True, timeout=3
+                capture_output=True, text=True, timeout=5
             )
-            return result.stdout.strip() or "Unknown"
+            output = result.stdout.strip()
+            if "|" in output:
+                process, title = output.split("|", 1)
+                return title.strip() or process.strip(), process.strip()
+            return output or "Unknown", output or "Unknown"
         except Exception:
-            return "Unknown"
+            return "Unknown", "Unknown"
     else:
-        return "Unknown"
+        return "Unknown", "Unknown"
 
 def is_session_locked():
     """画面ロック中か確認する"""
@@ -151,10 +170,36 @@ def is_system_overloaded():
     is_heavy = cpu_usage >= CPU_THRESHOLD or mem_usage >= MEM_THRESHOLD
     return is_heavy, cpu_usage, mem_usage
 
-def perform_ocr():
-    """メモリ上でスクショを取得し、直接OCRにかける（ディスクI/Oゼロ）"""
+def capture_active_window():
+    """アクティブウィンドウ領域のみキャプチャ（ディスクI/Oゼロ）"""
+    if _IS_WINDOWS:
+        try:
+            hwnd = win32gui.GetForegroundWindow()
+            rect = win32gui.GetWindowRect(hwnd)  # (left, top, right, bottom)
+            return ImageGrab.grab(bbox=rect)
+        except Exception:
+            return ImageGrab.grab()
+    elif _IS_MAC:
+        try:
+            script = '''
+tell application "System Events"
+    set frontApp to first application process whose frontmost is true
+    set winPos to position of front window of frontApp
+    set winSize to size of front window of frontApp
+    return ((item 1 of winPos) as string) & "," & ((item 2 of winPos) as string) & "," & ((item 1 of winSize) as string) & "," & ((item 2 of winSize) as string)
+end tell'''
+            result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=5)
+            x, y, w, h = map(int, result.stdout.strip().split(","))
+            return ImageGrab.grab(bbox=(x, y, x + w, y + h))
+        except Exception:
+            return ImageGrab.grab()
+    return ImageGrab.grab()
+
+def perform_ocr(screenshot=None):
+    """スクショをOCRにかける（ディスクI/Oゼロ）"""
     try:
-        screenshot = ImageGrab.grab()
+        if screenshot is None:
+            screenshot = ImageGrab.grab()
         text = pytesseract.image_to_string(screenshot, lang='jpn+eng')
         cleaned = re.sub(r'\s+', ' ', text).strip()
         if len(cleaned) >= OCR_SKIP_CHARS:
@@ -163,12 +208,13 @@ def perform_ocr():
     except Exception as e:
         return f"[OCR Error] {str(e)}"
 
-def save_log(title, ocr_text):
+def save_log(title, process, ocr_text):
     logical_date = get_logical_date()
     date_str = logical_date.strftime("%Y-%m-%d")
     filepath = os.path.join(LOG_DIR, f"activity_{date_str}.jsonl")
 
     entry = {"timestamp": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}
+    entry["process"] = process
     entry["window_title"] = title
     entry["ocr_text"] = ocr_text[:500]
 
@@ -188,43 +234,62 @@ def main():
     print(f"[Config] TESSERACT_CMD={TESSERACT_CMD}")
     print(f"[Config] Platform={platform.system()}")
 
-    cleanup_old_logs()
-    last_cleanup_date = get_logical_date()
-    last_merge_time = time.time()
-
-    # 起動時に競合コピーをマージ
-    merge_conflict_copies(get_logical_date().strftime("%Y-%m-%d"))
-
-    while True:
+    # PIDファイル管理（二重起動防止）
+    os.makedirs(LOG_DIR, exist_ok=True)
+    pid_file = os.path.join(LOG_DIR, "hybrid_logger.pid")
+    if os.path.exists(pid_file):
         try:
-            current_date = get_logical_date()
-            if current_date != last_cleanup_date:
-                cleanup_old_logs()
-                last_cleanup_date = current_date
+            existing_pid = int(open(pid_file).read().strip())
+            if psutil.pid_exists(existing_pid):
+                print(f"[Error] Already running (PID {existing_pid}). Exiting.")
+                sys.exit(1)
+        except (ValueError, OSError):
+            pass
+    with open(pid_file, 'w') as f:
+        f.write(str(os.getpid()))
 
-            # 1時間ごとに競合コピーをマージ
-            if time.time() - last_merge_time >= MERGE_INTERVAL:
-                merge_conflict_copies(current_date.strftime("%Y-%m-%d"))
-                last_merge_time = time.time()
+    try:
+        cleanup_old_logs()
+        last_cleanup_date = get_logical_date()
+        last_merge_time = time.time()
 
-            if is_session_locked():
-                time.sleep(INTERVAL)
-                continue
+        # 起動時に競合コピーをマージ
+        merge_conflict_copies(get_logical_date().strftime("%Y-%m-%d"))
 
-            title = get_active_window_title()
-            if title:
-                is_heavy, cpu, mem = is_system_overloaded()
+        while True:
+            try:
+                current_date = get_logical_date()
+                if current_date != last_cleanup_date:
+                    cleanup_old_logs()
+                    last_cleanup_date = current_date
 
-                if is_heavy:
-                    save_log(title, "[SKIPPED_DUE_TO_HIGH_LOAD]")
-                else:
-                    ocr_text = perform_ocr()
-                    save_log(title, ocr_text)
+                # 1時間ごとに競合コピーをマージ
+                if time.time() - last_merge_time >= MERGE_INTERVAL:
+                    merge_conflict_copies(current_date.strftime("%Y-%m-%d"))
+                    last_merge_time = time.time()
 
-        except Exception as e:
-            print(f"Loop Error: {e}")
+                if is_session_locked():
+                    time.sleep(INTERVAL)
+                    continue
 
-        time.sleep(INTERVAL)
+                title, process = get_active_window_info()
+                if title:
+                    is_heavy, cpu, mem = is_system_overloaded()
+
+                    if is_heavy:
+                        save_log(title, process, "[SKIPPED_DUE_TO_HIGH_LOAD]")
+                    else:
+                        screenshot = capture_active_window()
+                        ocr_text = perform_ocr(screenshot)
+                        save_log(title, process, ocr_text)
+
+            except Exception as e:
+                print(f"Loop Error: {e}")
+
+            time.sleep(INTERVAL)
+    finally:
+        if os.path.exists(pid_file):
+            os.remove(pid_file)
 
 if __name__ == "__main__":
     main()
