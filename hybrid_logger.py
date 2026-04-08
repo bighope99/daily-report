@@ -11,10 +11,12 @@ from PIL import ImageGrab
 import psutil
 import pytesseract
 
-# python-dotenv が入っていれば .env を読み込む
+# python-dotenv が入っていれば .env / .env.local を読み込む（スクリプトと同じディレクトリを基準にする）
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    _script_dir = os.path.dirname(os.path.abspath(__file__))
+    load_dotenv(os.path.join(_script_dir, '.env'))
+    load_dotenv(os.path.join(_script_dir, '.env.local'), override=True)
 except ImportError:
     pass
 
