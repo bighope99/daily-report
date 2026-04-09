@@ -71,16 +71,17 @@ API_TIMEOUT = 30
 # ==========================================
 
 def _setup_logger():
-    os.makedirs(LOG_DIR, exist_ok=True)
-    log_path = os.path.join(LOG_DIR, "debug_hybrid_logger.log")
-    handler = logging.handlers.RotatingFileHandler(
-        log_path, maxBytes=1_000_000, backupCount=3, encoding="utf-8"
-    )
-    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
     lg = logging.getLogger("hybrid_logger")
-    lg.setLevel(logging.DEBUG)
-    lg.addHandler(handler)
+    lg.addHandler(logging.NullHandler())
     return lg
+    # os.makedirs(LOG_DIR, exist_ok=True)
+    # log_path = os.path.join(LOG_DIR, "debug_hybrid_logger.log")
+    # handler = logging.handlers.RotatingFileHandler(
+    #     log_path, maxBytes=1_000_000, backupCount=3, encoding="utf-8"
+    # )
+    # handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+    # lg.setLevel(logging.DEBUG)
+    # lg.addHandler(handler)
 
 logger = _setup_logger()
 
