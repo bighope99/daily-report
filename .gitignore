@@ -1,2 +1,6 @@
 .env
 .env.local
+
+.claude/*
+!.claude/skills/
+.DS_Store

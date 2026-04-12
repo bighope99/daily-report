@@ -1,6 +1,6 @@
 # daily-report / hybrid_logger
 
-5分ごとにアクティブウィンドウとOCRで画面テキストを記録し、日報作成の素材を自動収集するツール。
+2分ごとにアクティブウィンドウとOCRで画面テキストを記録し、日報作成の素材を自動収集するツール。
 
 ## 概要
 
@@ -61,30 +61,50 @@ DAILY_REPORT_LOG_DIR=/Users/あなたの名前/Library/CloudStorage/GoogleDrive-
 
 保存したら閉じる。
 
-#### ステップ4: 動作確認（手動で起動してみる）
+#### ステップ4: start.sh のパスを確認する
+
+`start.sh` と `DailyReport.app/Contents/MacOS/run.sh` にはログ保存先やPATH等の環境変数がハードコードされている。自分の環境に合わせて編集すること：
+
+```bash
+# 確認するファイル
+cat start.sh
+cat DailyReport.app/Contents/MacOS/run.sh
+```
+
+特に以下の行を自分のパスに変更する：
+- `HOME` — ホームディレクトリ
+- `DAILY_REPORT_LOG_DIR` — ログ保存先（Google Drive のパス）
+- `PYTHONUSERBASE` / `PYTHONPATH` — Python パッケージのパス
+
+#### ステップ5: 動作確認（手動で起動してみる）
 
 ```bash
 cd ~/daily-report
-python3 hybrid_logger.py
+bash start.sh
 ```
 
-こんな表示が出れば OK：
-
-```
-[Config] LOG_DIR=/Users/.../日報用
-[Config] TESSERACT_CMD=tesseract
-[Config] Platform=Darwin
-```
-
+2分後にログファイル（`activity_YYYY-MM-DD.jsonl`）にエントリが追加されれば OK。
 `Ctrl + C` で止める。
 
-#### ステップ5: PC起動時に自動で立ち上がるようにする
+#### ステップ6: 画面収録の権限を付与する
 
-Mac には「LaunchAgents」という仕組みがあり、ここに設定ファイルを置くとログイン時に自動実行される（Windowsのスタートアップフォルダと同じ概念）。
+Mac では画面キャプチャに「画面収録」権限が必要。
+
+1. `システム設定 > プライバシーとセキュリティ > 画面収録` を開く
+2. `+` ボタンをクリック
+3. リポジトリ内の `DailyReport.app` を選択して追加
+4. トグルをオンにする
+
+> **なぜ .app が必要？**
+> macOS Sequoia 以降、LaunchAgent から起動したプロセスに画面収録権限を付与するには、`.app` バンドルに関連付ける必要がある。`DailyReport.app` はそのためのラッパーで、中身は `start.sh` と同じスクリプト。
+
+#### ステップ7: PC起動時に自動で立ち上がるようにする
+
+Mac の「LaunchAgents」に設定ファイルを置くとログイン時に自動実行される（Windowsのスタートアップフォルダと同じ概念）。
 
 **1. 設定ファイルを作る**
 
-ターミナルで以下をそのまま実行する。`/Users/ユーザー名` の部分だけ自分のものに変える：
+ターミナルで以下をそのまま実行する。パスは自分のものに変える：
 
 ```bash
 cat > ~/Library/LaunchAgents/com.daily-report.plist << 'EOF'
@@ -96,16 +116,12 @@ cat > ~/Library/LaunchAgents/com.daily-report.plist << 'EOF'
   <string>com.daily-report</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/python3</string>
-    <string>/Users/ユーザー名/daily-report/hybrid_logger.py</string>
+    <string>/Users/ユーザー名/daily-report/DailyReport.app/Contents/MacOS/run.sh</string>
   </array>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>DAILY_REPORT_LOG_DIR</key>
-    <string>/Users/ユーザー名/Library/CloudStorage/GoogleDrive-メールアドレス/マイドライブ/日報用</string>
-  </dict>
   <key>RunAtLoad</key>
   <true/>
+  <key>AssociatedBundleIdentifiers</key>
+  <string>com.daily-report.app</string>
   <key>StandardOutPath</key>
   <string>/tmp/hybrid_logger.log</string>
   <key>StandardErrorPath</key>
@@ -115,22 +131,28 @@ cat > ~/Library/LaunchAgents/com.daily-report.plist << 'EOF'
 EOF
 ```
 
-> **注意**: `.env` ファイルは LaunchAgents からは読み込まれないため、`EnvironmentVariables` のブロックにも同じパスを書く必要がある。
+> **ポイント**:
+> - `ProgramArguments` は `DailyReport.app` 内の `run.sh` を指定する
+> - `AssociatedBundleIdentifiers` により、macOS がこのプロセスを `DailyReport.app` に関連付け、画面収録権限が適用される
+> - `.env` ファイルは LaunchAgent からは読み込まれないため、環境変数は `run.sh` 内にハードコードしている
 
 **2. 登録して今すぐ起動する**
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.daily-report.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.daily-report.plist
 ```
 
 **3. 動いているか確認する**
 
 ```bash
 # プロセスが起動しているか確認
-pgrep -fl hybrid_logger
+ps aux | grep hybrid_logger | grep -v grep
 
-# ログを見る
-tail -f /tmp/hybrid_logger.log
+# エラーログを見る
+cat /tmp/hybrid_logger.log
+
+# デバッグログを見る（LOG_DIR内）
+tail -20 /path/to/LOG_DIR/debug_hybrid_logger.log
 ```
 
 これで次回ログイン時から自動で起動するようになる。
@@ -138,11 +160,15 @@ tail -f /tmp/hybrid_logger.log
 #### 停止・登録解除
 
 ```bash
-# 今すぐ停止（PIDファイルを使って該当プロセスだけ終了）
-kill $(cat ~/daily-report-logs/hybrid_logger.pid)
+# 今すぐ停止
+launchctl bootout gui/$(id -u)/com.daily-report
 
-# 自動起動を解除（ファイルも消す）
-launchctl unload ~/Library/LaunchAgents/com.daily-report.plist
+# 再起動（停止 → 起動）
+launchctl bootout gui/$(id -u)/com.daily-report
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.daily-report.plist
+
+# 自動起動を完全に解除（ファイルも消す）
+launchctl bootout gui/$(id -u)/com.daily-report
 rm ~/Library/LaunchAgents/com.daily-report.plist
 ```
 
@@ -213,6 +239,23 @@ Stop-Process -Id $pidVal
 
 ---
 
+## ファイル構成
+
+```
+daily-report/
+├── hybrid_logger.py          # メインスクリプト
+├── start.sh                  # 手動起動・環境変数設定用
+├── DailyReport.app/          # macOS 画面収録権限用の .app ラッパー
+│   └── Contents/
+│       ├── Info.plist         # バンドルID: com.daily-report.app
+│       └── MacOS/
+│           └── run.sh         # start.sh と同等（launchd 用）
+├── .env                      # ログ保存先等の設定（git管理外）
+└── README.md
+```
+
+---
+
 ## ログ仕様
 
 **ファイル名**: `activity_YYYY-MM-DD.jsonl`（日付ごとに1ファイル）
@@ -221,7 +264,8 @@ Stop-Process -Id $pidVal
 ```json
 {
   "timestamp": "2026-02-20T10:30:00",
-  "window_title": "Visual Studio Code",
+  "process": "Google Chrome",
+  "window_title": "GitHub - daily-report",
   "ocr_text": "（画面テキスト 最大500文字）"
 }
 ```
@@ -233,3 +277,33 @@ Stop-Process -Id $pidVal
 複数PCで同じGoogle Driveフォルダを `DAILY_REPORT_LOG_DIR` に設定すると、ログを1つのファイルにまとめられます。
 
 Google Drive の同期競合で重複ファイルが生成された場合、起動時と1時間ごとに自動でマージ・削除されます。
+
+---
+
+## トラブルシューティング
+
+### Mac: 画面キャプチャが動かない
+
+`/tmp/hybrid_logger.log` やデバッグログに `could not create image from display` が出る場合：
+
+1. `システム設定 > プライバシーとセキュリティ > 画面収録` で `DailyReport.app` が追加・有効になっているか確認
+2. LaunchAgent を再起動: `launchctl bootout gui/$(id -u)/com.daily-report && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.daily-report.plist`
+
+### Mac: プロセスが起動しない
+
+```bash
+# LaunchAgent の状態確認
+launchctl list | grep daily-report
+
+# エラー確認
+cat /tmp/hybrid_logger.log
+```
+
+### 二重起動防止
+
+PIDファイル（`hybrid_logger.pid`）で制御。既にプロセスが動いている場合は起動しない。
+プロセスが異常終了してPIDファイルが残った場合は手動で削除する：
+
+```bash
+rm /path/to/LOG_DIR/hybrid_logger.pid
+```

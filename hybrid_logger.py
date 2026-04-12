@@ -11,8 +11,9 @@ import logging
 import logging.handlers
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from PIL import ImageGrab
+from PIL import Image
 import psutil
+import tempfile
 import pytesseract
 
 # python-dotenv が入っていれば .env / .env.local を読み込む（スクリプトと同じディレクトリを基準にする）
@@ -72,16 +73,15 @@ API_TIMEOUT = 30
 
 def _setup_logger():
     lg = logging.getLogger("hybrid_logger")
-    lg.addHandler(logging.NullHandler())
+    os.makedirs(LOG_DIR, exist_ok=True)
+    log_path = os.path.join(LOG_DIR, "debug_hybrid_logger.log")
+    handler = logging.handlers.RotatingFileHandler(
+        log_path, maxBytes=1_000_000, backupCount=3, encoding="utf-8"
+    )
+    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+    lg.setLevel(logging.DEBUG)
+    lg.addHandler(handler)
     return lg
-    # os.makedirs(LOG_DIR, exist_ok=True)
-    # log_path = os.path.join(LOG_DIR, "debug_hybrid_logger.log")
-    # handler = logging.handlers.RotatingFileHandler(
-    #     log_path, maxBytes=1_000_000, backupCount=3, encoding="utf-8"
-    # )
-    # handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-    # lg.setLevel(logging.DEBUG)
-    # lg.addHandler(handler)
 
 logger = _setup_logger()
 
@@ -248,6 +248,7 @@ def is_system_overloaded():
 
 def _capture_active_window_impl():
     if _IS_WINDOWS:
+        from PIL import ImageGrab
         try:
             hwnd = win32gui.GetForegroundWindow()
             rect = win32gui.GetWindowRect(hwnd)  # (left, top, right, bottom)
@@ -255,20 +256,36 @@ def _capture_active_window_impl():
         except Exception:
             return ImageGrab.grab()
     elif _IS_MAC:
+        # macOS: screencapture コマンドを使用
+        tmp_path = os.path.join(tempfile.gettempdir(), "hybrid_logger_capture.png")
         try:
-            script = '''
-tell application "System Events"
-    set frontApp to first application process whose frontmost is true
-    set winPos to position of front window of frontApp
-    set winSize to size of front window of frontApp
-    return ((item 1 of winPos) as string) & "," & ((item 2 of winPos) as string) & "," & ((item 1 of winSize) as string) & "," & ((item 2 of winSize) as string)
-end tell'''
-            result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=5)
-            x, y, w, h = map(int, result.stdout.strip().split(","))
-            return ImageGrab.grab(bbox=(x, y, x + w, y + h))
-        except Exception:
-            return ImageGrab.grab()
-    return ImageGrab.grab()
+            result = subprocess.run(
+                ["screencapture", "-x", tmp_path],
+                capture_output=True, text=True, timeout=10
+            )
+            logger.debug(f"screencapture rc={result.returncode} stderr={result.stderr.strip()}")
+            if result.returncode == 0 and os.path.exists(tmp_path):
+                file_size = os.path.getsize(tmp_path)
+                logger.debug(f"screencapture file size: {file_size}")
+                if file_size > 0:
+                    img = Image.open(tmp_path)
+                    img.load()
+                    os.remove(tmp_path)
+                    return img
+            elif os.path.exists(tmp_path):
+                logger.warning(f"screencapture file exists but rc={result.returncode}")
+            else:
+                logger.warning("screencapture produced no file")
+        except Exception as e:
+            logger.warning(f"screencapture failed: {e}")
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+        return None
+    return None
 
 def capture_active_window():
     return _run_with_timeout(_capture_active_window_impl, fallback=None)
@@ -281,10 +298,12 @@ def _perform_ocr_impl(screenshot):
     return cleaned
 
 def perform_ocr(screenshot=None):
-    """スクショをOCRにかける（ディスクI/Oゼロ）"""
+    """スクショをOCRにかける"""
     try:
         if screenshot is None:
-            screenshot = ImageGrab.grab()
+            screenshot = capture_active_window()
+        if screenshot is None:
+            return "[CAPTURE FAILED]"
         result = _run_with_timeout(
             lambda: _perform_ocr_impl(screenshot),
             fallback="[OCR TIMEOUT]"
