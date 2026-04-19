@@ -82,7 +82,9 @@ export MY_ENV_VAR="value"
   <key>RunAtLoad</key>
   <true/>
   <key>AssociatedBundleIdentifiers</key>
-  <string>com.example.myapp</string>
+  <array>
+    <string>com.example.myapp</string>
+  </array>
   <key>StandardOutPath</key>
   <string>/tmp/myapp.log</string>
   <key>StandardErrorPath</key>

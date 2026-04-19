@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.daily-report</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{PROJECT_ROOT}}/DailyReport.app/Contents/MacOS/DailyReport</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>AssociatedBundleIdentifiers</key>
+  <array>
+    <string>com.daily-report.app</string>
+  </array>
+  <key>StandardOutPath</key>
+  <string>/tmp/hybrid_logger.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/hybrid_logger.log</string>
+</dict>
+</plist>

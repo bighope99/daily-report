@@ -257,6 +257,7 @@ def _capture_active_window_impl():
             return ImageGrab.grab()
     elif _IS_MAC:
         # macOS: screencapture コマンドを使用
+        # DailyReport.app (Swift) を親プロセスにすることで TCC 権限が継承される
         tmp_path = os.path.join(tempfile.gettempdir(), "hybrid_logger_capture.png")
         try:
             result = subprocess.run(

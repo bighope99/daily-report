@@ -7,7 +7,7 @@
   <key>CFBundleName</key>
   <string>DailyReport</string>
   <key>CFBundleExecutable</key>
-  <string>run.sh</string>
+  <string>DailyReport</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSUIElement</key>
